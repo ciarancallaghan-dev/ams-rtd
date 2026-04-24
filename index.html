@@ -355,7 +355,7 @@ async function fetchArrivals(station, offset = 0) {
 }
 
 // ── Journey calculations ─────────────────────────────────────────────
-function calcAMStoRTD(deps, arrRTD, refTime) {
+function calcAMStoRTD(deps, arrRTD, arrSHL, refTime) {
   const { asd, asdz, shl } = deps;
   const cutoff  = addMin(refTime, -3);
   const journeys = [];
@@ -376,24 +376,26 @@ function calcAMStoRTD(deps, arrRTD, refTime) {
   // 2. Via Schiphol: ASD → SHL → RTD
   const shlToRtd = shl.filter(d => goesTo(d, 'rotterdam'));
   asd.filter(d => goesVia(d, 'schiphol') && !goesTo(d, 'rotterdam')).forEach(d => {
-    const dep1   = actualDepart(d);
+    const dep1 = actualDepart(d);
     if (dep1 < cutoff) return;
-    const legT   = isSprinter(d) ? T.ASD_SHL_SPR : T.ASD_SHL_IC;
-    const shlArr = addMin(dep1, legT);
-    const conn   = shlToRtd.find(s => {
+    // Exact arrival at Schiphol from arrivals board
+    const { arr: shlArr, exact: shlExact } = exactArrival(d.serviceNumber, arrSHL,
+      addMin(dep1, isSprinter(d) ? T.ASD_SHL_SPR : T.ASD_SHL_IC));
+    const conn = shlToRtd.find(s => {
       const gap = diffMin(shlArr, actualDepart(s));
       return gap >= 0 && gap < 90;
     });
     if (!conn) return;
     const dep2 = actualDepart(conn);
     const xfer = Math.round(diffMin(shlArr, dep2));
-    const { arr, exact, pf: arrPf } = exactArrival(conn.serviceNumber, arrRTD, addMin(dep2, isICDirect(conn) ? T.SHL_RTD_ICD : T.SHL_RTD_IC));
+    const { arr, exact, pf: arrPf } = exactArrival(conn.serviceNumber, arrRTD,
+      addMin(dep2, isICDirect(conn) ? T.SHL_RTD_ICD : T.SHL_RTD_IC));
     const total = Math.round(diffMin(dep1, arr));
     journeys.push({
       type: 'Via Schiphol', totalMin: total, dep: dep1, arr,
       xfer, xferMin: shlMin, possible: xfer >= shlMin,
       legs: [
-        { from: 'Amsterdam Centraal', dep: dep1, to: 'Schiphol', arr: shlArr, pf: d.platform, train: d },
+        { from: 'Amsterdam Centraal', dep: dep1, to: 'Schiphol', arr: shlArr, pf: d.platform, train: d, exact: shlExact },
         { xfer: true, mins: xfer, min: shlMin },
         { from: 'Schiphol', dep: dep2, to: 'Rotterdam Centraal', arr, pf: conn.platform, arrPf, train: conn, exact }
       ]
@@ -422,7 +424,7 @@ function calcAMStoRTD(deps, arrRTD, refTime) {
   return dedup(journeys);
 }
 
-function calcRTDtoAMS(deps, arrASD, refTime) {
+function calcRTDtoAMS(deps, arrASD, arrSHL, arrASDZ, refTime) {
   const { rtd, shl } = deps;
   const cutoff  = addMin(refTime, -3);
   const journeys = [];
@@ -443,10 +445,12 @@ function calcRTDtoAMS(deps, arrASD, refTime) {
   // 2. Via Schiphol: RTD → SHL → ASD
   const shlToAsd = shl.filter(d => goesTo(d, 'amsterdam'));
   rtd.filter(d => goesVia(d, 'schiphol') && !goesTo(d, 'amsterdam centraal')).forEach(d => {
-    const dep1   = actualDepart(d);
+    const dep1 = actualDepart(d);
     if (dep1 < cutoff) return;
-    const shlArr = addMin(dep1, T.RTD_SHL);
-    const conn   = shlToAsd.find(s => {
+    // Exact arrival at Schiphol
+    const { arr: shlArr, exact: shlExact } = exactArrival(d.serviceNumber, arrSHL,
+      addMin(dep1, T.RTD_SHL));
+    const conn = shlToAsd.find(s => {
       const gap = diffMin(shlArr, actualDepart(s));
       return gap >= 0 && gap < 90;
     });
@@ -459,7 +463,7 @@ function calcRTDtoAMS(deps, arrASD, refTime) {
       type: 'Via Schiphol', totalMin: total, dep: dep1, arr,
       xfer, xferMin: shlMin, possible: xfer >= shlMin,
       legs: [
-        { from: 'Rotterdam Centraal', dep: dep1, to: 'Schiphol', arr: shlArr, pf: d.platform, train: d },
+        { from: 'Rotterdam Centraal', dep: dep1, to: 'Schiphol', arr: shlArr, pf: d.platform, train: d, exact: shlExact },
         { xfer: true, mins: xfer, min: shlMin },
         { from: 'Schiphol', dep: dep2, to: 'Amsterdam Centraal', arr, pf: conn.platform, arrPf, train: conn, exact }
       ]
@@ -468,19 +472,21 @@ function calcRTDtoAMS(deps, arrASD, refTime) {
 
   // 3. RTD → ASDZ + Metro to ASD
   rtd.filter(d => goesVia(d, 'amsterdam zuid') || goesTo(d, 'amsterdam zuid')).forEach(d => {
-    const dep1    = actualDepart(d);
+    const dep1 = actualDepart(d);
     if (dep1 < cutoff) return;
-    const tASDZ   = isICDirect(d) ? T.RTD_ASDZ : T.RTD_ASDZ + 10;
-    const asdzArr = addMin(dep1, tASDZ);
-    const metro   = getMetroTime(asdzArr);
-    const asdArr  = addMin(asdzArr, metro.total);
-    const total   = Math.round(diffMin(dep1, asdArr));
+    // Exact arrival at Amsterdam Zuid
+    const { arr: asdzArr, exact: asdzExact } = exactArrival(d.serviceNumber, arrASDZ,
+      addMin(dep1, isICDirect(d) ? T.RTD_ASDZ : T.RTD_ASDZ + 10));
+    const metro  = getMetroTime(asdzArr);
+    const asdArr = addMin(asdzArr, metro.total);
+    const total  = Math.round(diffMin(dep1, asdArr));
     journeys.push({
       type: 'Via Amsterdam Zuid', totalMin: total, dep: dep1, arr: asdArr,
       legs: [
-        { from: 'Rotterdam Centraal', dep: dep1, to: 'Amsterdam Zuid', arr: asdzArr, pf: d.platform, train: d },
+        { from: 'Rotterdam Centraal', dep: dep1, to: 'Amsterdam Zuid', arr: asdzArr,
+          pf: d.platform, train: d, exact: asdzExact },
         { from: 'Amsterdam Zuid', dep: asdzArr, to: 'Amsterdam Centraal', arr: asdArr,
-          metro: true, metroMin: metro.total, metroFreq: metro.freq, exact: false }
+          metro: true, metroMin: metro.total, metroFreq: metro.freq }
       ]
     });
   });
@@ -669,17 +675,18 @@ async function refresh() {
   }
 
   try {
-    // Fetch departures and exact arrivals at destination stations in parallel
-    const [asd, asdz, shl, rtd, arrRTD, arrASD] = await Promise.all([
+    // Fetch departures and exact arrivals at all relevant stations in parallel
+    const [asd, asdz, shl, rtd, arrRTD, arrASD, arrSHL, arrASDZ] = await Promise.all([
       fetchDeps('ASD',  offset), fetchDeps('ASDZ', offset),
       fetchDeps('SHL',  offset), fetchDeps('RTD',  offset),
-      fetchArrivals('RTD', offset), fetchArrivals('ASD', offset)
+      fetchArrivals('RTD',  offset), fetchArrivals('ASD',  offset),
+      fetchArrivals('SHL',  offset), fetchArrivals('ASDZ', offset)
     ]);
 
     const deps     = { asd, asdz, shl, rtd };
     const journeys = direction === 'AMS_RTD'
-      ? calcAMStoRTD(deps, arrRTD, refTime)
-      : calcRTDtoAMS(deps, arrASD, refTime);
+      ? calcAMStoRTD(deps, arrRTD, arrSHL, refTime)
+      : calcRTDtoAMS(deps, arrASD, arrSHL, arrASDZ, refTime);
 
     renderJourneys(journeys);
 
