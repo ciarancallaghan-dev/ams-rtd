@@ -57,7 +57,6 @@ body {
   cursor: pointer;
   letter-spacing: 0.3px;
 }
-.direction-toggle .arrow { font-size: 14px; opacity: 0.8; }
 .header-btns { display: flex; gap: 8px; }
 .icon-btn {
   width: 36px; height: 36px;
@@ -73,6 +72,19 @@ body {
   color: rgba(255,255,255,0.65);
   display: flex;
   justify-content: space-between;
+  align-items: center;
+}
+.live-dot {
+  display: inline-block;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  margin-right: 5px;
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
 }
 
 /* ── Settings panel ── */
@@ -81,18 +93,19 @@ body {
   border-bottom: 1px solid var(--sep);
   overflow: hidden;
   max-height: 0;
-  transition: max-height 0.25s ease;
+  transition: max-height 0.3s ease;
 }
-.settings.open { max-height: 200px; }
-.settings-inner { padding: 16px 20px; display: flex; flex-direction: column; gap: 16px; }
+.settings.open { max-height: 320px; }
+.settings-inner { padding: 16px 20px; display: flex; flex-direction: column; gap: 18px; }
 .setting-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
 }
-.setting-label { font-size: 15px; }
+.setting-label { font-size: 15px; font-weight: 500; }
 .setting-sub { font-size: 12px; color: var(--sub); margin-top: 2px; }
-.stepper { display: flex; align-items: center; gap: 10px; }
+.stepper { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 .step-btn {
   width: 30px; height: 30px;
   border-radius: 50%;
@@ -103,6 +116,31 @@ body {
   line-height: 1;
 }
 .step-val { font-size: 17px; font-weight: 600; min-width: 52px; text-align: center; }
+
+/* ── Datetime picker ── */
+.time-control { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
+.time-input {
+  font-size: 14px;
+  font-family: inherit;
+  padding: 6px 10px;
+  border: 1.5px solid var(--sep);
+  border-radius: 9px;
+  background: var(--bg);
+  color: var(--text);
+  outline: none;
+  -webkit-appearance: none;
+}
+.time-input:focus { border-color: var(--blue); }
+.now-btn {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--blue);
+  background: none;
+  border: 1.5px solid var(--blue);
+  border-radius: 20px;
+  padding: 3px 12px;
+  cursor: pointer;
+}
 
 /* ── Journey list ── */
 .list { padding: 12px 16px; }
@@ -221,20 +259,15 @@ body {
   margin-left: 5px;
   vertical-align: middle;
 }
-.badge-ic   { background: #003F6B; color: #fff; }
-.badge-icd  { background: #E8600A; color: #fff; }
-.badge-spr  { background: #0076BD; color: #fff; }
-.badge-ec   { background: #7A1FA2; color: #fff; }
+.badge-ic    { background: #003F6B; color: #fff; }
+.badge-icd   { background: #E8600A; color: #fff; }
+.badge-spr   { background: #0076BD; color: #fff; }
 .badge-metro { background: #E4003A; color: #fff; }
 .delay { color: var(--orange); font-weight: 600; font-size: 12px; margin-left: 4px; }
 .cancelled .stop-time { text-decoration: line-through; color: var(--red); }
 
 /* ── States ── */
-.loading {
-  text-align: center;
-  padding: 60px 20px;
-  color: var(--sub);
-}
+.loading { text-align: center; padding: 60px 20px; color: var(--sub); }
 .spinner {
   width: 36px; height: 36px;
   border: 3px solid var(--sep);
@@ -255,13 +288,9 @@ body {
 .error-title { font-weight: 600; margin-bottom: 4px; }
 .error-sub { font-size: 13px; color: var(--sub); margin-bottom: 14px; }
 .retry-btn {
-  background: var(--blue);
-  color: #fff;
-  border: none;
-  padding: 9px 22px;
-  border-radius: 10px;
-  font-size: 15px;
-  cursor: pointer;
+  background: var(--blue); color: #fff;
+  border: none; padding: 9px 22px;
+  border-radius: 10px; font-size: 15px; cursor: pointer;
 }
 .empty { text-align: center; padding: 50px 20px; color: var(--sub); font-size: 15px; }
 </style>
@@ -272,7 +301,7 @@ body {
   <div class="header-row">
     <button class="direction-toggle" onclick="flipDirection()">
       <span id="dirFrom">Amsterdam C.</span>
-      <span class="arrow" id="dirArrow">&#8594;</span>
+      <span style="font-size:14px;opacity:0.8">&#8594;</span>
       <span id="dirTo">Rotterdam C.</span>
     </button>
     <div class="header-btns">
@@ -281,35 +310,47 @@ body {
     </div>
   </div>
   <div class="status-line">
-    <span id="statusText">Loading...</span>
+    <span id="statusText"><span class="live-dot"></span>Loading...</span>
     <span id="updatedText"></span>
   </div>
 </div>
 
 <div class="settings" id="settingsPanel">
   <div class="settings-inner">
+
+    <!-- Schiphol transfer time -->
     <div class="setting-row">
       <div>
         <div class="setting-label">Schiphol transfer time</div>
         <div class="setting-sub">Your minimum to change platforms</div>
       </div>
       <div class="stepper">
-        <button class="step-btn" onclick="changeSetting('shl', -1)">&#8722;</button>
+        <button class="step-btn" onclick="changeSetting(-1)">&#8722;</button>
         <div class="step-val"><span id="shlVal">2</span> min</div>
-        <button class="step-btn" onclick="changeSetting('shl', 1)">+</button>
+        <button class="step-btn" onclick="changeSetting(1)">+</button>
       </div>
     </div>
+
+    <!-- Date / time picker -->
     <div class="setting-row">
       <div>
-        <div class="setting-label">Metro time (Zuid &#8596; Centraal)</div>
-        <div class="setting-sub">Including average wait for metro</div>
+        <div class="setting-label">Departure time</div>
+        <div class="setting-sub">Leave blank for live data</div>
       </div>
-      <div class="stepper">
-        <button class="step-btn" onclick="changeSetting('metro', -1)">&#8722;</button>
-        <div class="step-val"><span id="metroVal">20</span> min</div>
-        <button class="step-btn" onclick="changeSetting('metro', 1)">+</button>
+      <div class="time-control">
+        <input type="datetime-local" id="deptTime" class="time-input" onchange="refresh()">
+        <button class="now-btn" onclick="clearTime()">&#9679; Live now</button>
       </div>
     </div>
+
+    <!-- Metro info (read-only) -->
+    <div class="setting-row" style="opacity:0.7">
+      <div>
+        <div class="setting-label">Metro line 52 (Zuid &#8596; Centraal)</div>
+        <div class="setting-sub" id="metroInfoText">Calculated from GVB timetable</div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -318,39 +359,82 @@ body {
 </div>
 
 <script>
-// ── Config ──────────────────────────────────────────────────────────
-const S = {
-  shl:   parseInt(localStorage.getItem('shl')   || '2'),
-  metro: parseInt(localStorage.getItem('metro') || '20'),
-};
-document.getElementById('shlVal').textContent   = S.shl;
-document.getElementById('metroVal').textContent = S.metro;
+// ── Config ───────────────────────────────────────────────────────────
+let shlMin = parseInt(localStorage.getItem('shl') || '2');
+document.getElementById('shlVal').textContent = shlMin;
 
-// Fixed travel time estimates (minutes)
+// Fixed train travel time estimates (minutes)
 const T = {
-  ASD_SHL_IC:  17,  // Amsterdam C. → Schiphol (IC/IC Direct)
+  ASD_SHL_IC:  17,  // Amsterdam C. → Schiphol (IC)
   ASD_SHL_SPR: 21,  // Amsterdam C. → Schiphol (Sprinter)
-  SHL_RTD_IC:  40,  // Schiphol → Rotterdam C. (regular IC via Den Haag)
-  SHL_RTD_ICD: 25,  // Schiphol → Rotterdam C. (IC Direct via HSL)
-  RTD_SHL:     22,  // Rotterdam C. → Schiphol (HSL fast trains)
+  SHL_RTD_IC:  40,  // Schiphol → Rotterdam (regular IC via Den Haag)
+  SHL_RTD_ICD: 25,  // Schiphol → Rotterdam (IC Direct via HSL)
+  RTD_SHL:     22,  // Rotterdam → Schiphol (HSL fast trains)
   SHL_ASD:     17,  // Schiphol → Amsterdam C.
-  ASDZ_RTD:    35,  // Amsterdam Zuid → Rotterdam C. (IC Direct)
-  RTD_ASDZ:    30,  // Rotterdam C. → Amsterdam Zuid (IC Direct)
-  ASD_RTD_DIR: 60,  // Amsterdam C. → Rotterdam C. direct (via Den Haag)
-  RTD_ASD_DIR: 60,  // Rotterdam C. → Amsterdam C. direct
+  ASDZ_RTD:    35,  // Amsterdam Zuid → Rotterdam (IC Direct)
+  RTD_ASDZ:    30,  // Rotterdam → Amsterdam Zuid (IC Direct)
+  ASD_RTD_DIR: 60,  // Direct (via Den Haag)
+  RTD_ASD_DIR: 60,
 };
+
+// ── GVB Metro line 52 timetable ──────────────────────────────────────
+// Source: GVB published timetable. No real-time API available without key.
+function getMetroTime(refDate) {
+  const d = refDate || new Date();
+  const h = d.getHours() + d.getMinutes() / 60;
+  const day = d.getDay(); // 0=Sun, 6=Sat
+  const isWeekday = day >= 1 && day <= 5;
+
+  let freqMin;
+  if (isWeekday && ((h >= 6.5 && h < 9.0) || (h >= 16.0 && h < 18.5))) {
+    freqMin = 5;    // peak: every 5 min
+  } else if (!isWeekday) {
+    freqMin = 10;   // weekend: every 10 min
+  } else {
+    freqMin = 7.5;  // off-peak weekday: every 7.5 min
+  }
+
+  const avgWait  = freqMin / 2;
+  const travelMin = 14; // ASD ↔ ASDZ: 6 stops, ~14 min
+  return { total: Math.round(avgWait + travelMin), freq: freqMin };
+}
+
+function metroLabel(refDate) {
+  const { total, freq } = getMetroTime(refDate);
+  const d = refDate || new Date();
+  const day = d.getDay();
+  const h = d.getHours() + d.getMinutes() / 60;
+  const isWeekday = day >= 1 && day <= 5;
+  const label = !isWeekday ? 'weekend' :
+    ((h >= 6.5 && h < 9.0) || (h >= 16.0 && h < 18.5)) ? 'peak' : 'off-peak';
+  return `~${total} min (every ${freq} min ${label}, 14 min journey) &mdash; GVB timetable`;
+}
 
 // ── State ────────────────────────────────────────────────────────────
-let direction = 'AMS_RTD';  // or 'RTD_AMS'
+let direction = 'AMS_RTD';
 let refreshTimer = null;
 let isLoading = false;
 
 // ── Utilities ────────────────────────────────────────────────────────
-const addMin = (d, m) => new Date(+d + m * 60000);
-const diffMin = (a, b) => (+b - +a) / 60000;
-const fmt = d => d.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
-const fmtDur = m => m >= 60 ? `${Math.floor(m/60)}h ${m%60}m` : `${m}m`;
-const now = () => new Date();
+const addMin  = (d, m)    => new Date(+d + m * 60000);
+const diffMin = (a, b)    => (+b - +a) / 60000;
+const fmt     = d         => d.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
+const fmtDur  = m         => m >= 60 ? `${Math.floor(m/60)}h ${m % 60}m` : `${m}m`;
+
+function getSelectedTime() {
+  const v = document.getElementById('deptTime').value;
+  return v ? new Date(v) : new Date();
+}
+
+function isLiveMode() {
+  return !document.getElementById('deptTime').value;
+}
+
+function getOffset() {
+  if (isLiveMode()) return 0;
+  const diffMs = +getSelectedTime() - Date.now();
+  return Math.max(0, Math.round(diffMs / 60000));
+}
 
 function actualDepart(dep) {
   return addMin(new Date(dep.departureTime), (dep.delaySeconds || 0) / 60);
@@ -363,13 +447,12 @@ function goesVia(dep, word) {
   return (dep.via || '').toLowerCase().includes(word) ||
          (dep.destination || '').toLowerCase().includes(word);
 }
-function isIC(dep) {
-  const t = (dep.transportType || dep.transportCode || '').toLowerCase();
-  return t.includes('intercity') || t.includes('ic');
-}
 function isICDirect(dep) {
-  const t = (dep.transportType || dep.transportCode || '').toLowerCase();
+  const t = (dep.transportType || '').toLowerCase();
   return t.includes('direct') || t.includes('eurocity') || t.includes('eurostar');
+}
+function isSprinter(dep) {
+  return (dep.transportType || '').toLowerCase().includes('sprinter');
 }
 
 function trainBadge(dep) {
@@ -380,29 +463,19 @@ function trainBadge(dep) {
     return '<span class="badge badge-ic">IC</span>';
   if (t.includes('sprinter'))
     return '<span class="badge badge-spr">SPR</span>';
-  return `<span class="badge badge-ic">${dep.transportType || '?'}</span>`;
-}
-
-function transferClass(avail, min) {
-  if (avail >= min + 2) return 'xfer-ok';
-  if (avail >= min)     return 'xfer-warn';
-  return 'xfer-bad';
-}
-function transferIcon(avail, min) {
-  if (avail >= min) return '&#10003;';
-  return '&#10005;';
+  return `<span class="badge badge-ic">${dep.transportType || ''}</span>`;
 }
 
 // ── API ──────────────────────────────────────────────────────────────
-async function fetchDeps(station) {
-  const url = `https://www.rijdendetreinen.nl/en/ajax/departures?station=${station}`;
+async function fetchDeps(station, offset = 0) {
+  const base = `https://www.rijdendetreinen.nl/en/ajax/departures?station=${station}`;
+  const url  = offset > 0 ? `${base}&offset=${offset}` : base;
   try {
-    const r = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    const r = await fetch(url, { headers: { Accept: 'application/json' } });
     if (!r.ok) throw new Error(r.status);
     const d = await r.json();
     return d.departures || [];
   } catch {
-    // CORS proxy fallback
     const proxy = `https://corsproxy.io/?url=${encodeURIComponent(url)}`;
     const r = await fetch(proxy);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -412,187 +485,141 @@ async function fetchDeps(station) {
 }
 
 // ── Journey calculations ─────────────────────────────────────────────
-function calcAMStoRTD(deps) {
+function calcAMStoRTD(deps, refTime) {
   const { asd, asdz, shl } = deps;
-  const cutoff = addMin(now(), -3);
+  const cutoff  = addMin(refTime, -3);
   const journeys = [];
 
-  // ── 1. Direct trains ASD → RTD ──────────────────────────────────
-  asd
-    .filter(d => goesTo(d, 'rotterdam'))
-    .forEach(d => {
-      const dep = actualDepart(d);
-      if (dep < cutoff) return;
-      const arr = addMin(dep, T.ASD_RTD_DIR);
-      journeys.push({
-        type: 'Direct',
-        totalMin: T.ASD_RTD_DIR,
-        dep, arr,
-        legs: [{
-          from: 'Amsterdam Centraal', dep,
-          to: 'Rotterdam Centraal', arr,
-          pf: d.platform, train: d, est: true
-        }]
-      });
+  // 1. Direct ASD → RTD
+  asd.filter(d => goesTo(d, 'rotterdam')).forEach(d => {
+    const dep = actualDepart(d);
+    if (dep < cutoff) return;
+    const arr = addMin(dep, T.ASD_RTD_DIR);
+    journeys.push({
+      type: 'Direct', totalMin: T.ASD_RTD_DIR, dep, arr,
+      legs: [{ from: 'Amsterdam Centraal', dep, to: 'Rotterdam Centraal', arr, pf: d.platform, train: d, est: true }]
     });
+  });
 
-  // ── 2. Via Schiphol: ASD → SHL → RTD ────────────────────────────
+  // 2. Via Schiphol: ASD → SHL → RTD
   const shlToRtd = shl.filter(d => goesTo(d, 'rotterdam'));
-  asd
-    .filter(d => goesVia(d, 'schiphol') && !goesTo(d, 'rotterdam'))
-    .forEach(d => {
-      const dep1 = actualDepart(d);
-      if (dep1 < cutoff) return;
-      const travelToSHL = isICDirect(d) ? T.ASD_SHL_IC : (d.transportType?.toLowerCase().includes('sprinter') ? T.ASD_SHL_SPR : T.ASD_SHL_IC);
-      const shlArr = addMin(dep1, travelToSHL);
-
-      const conn = shlToRtd.find(s => {
-        const d2 = actualDepart(s);
-        const gap = diffMin(shlArr, d2);
-        return gap >= 0 && gap < 90;
-      });
-      if (!conn) return;
-
-      const dep2   = actualDepart(conn);
-      const xfer   = Math.round(diffMin(shlArr, dep2));
-      const tRTD   = isICDirect(conn) ? T.SHL_RTD_ICD : T.SHL_RTD_IC;
-      const arr    = addMin(dep2, tRTD);
-      const total  = Math.round(diffMin(dep1, arr));
-
-      journeys.push({
-        type: 'Via Schiphol',
-        totalMin: total,
-        dep: dep1, arr,
-        xfer, xferMin: S.shl,
-        possible: xfer >= S.shl,
-        legs: [
-          { from: 'Amsterdam Centraal', dep: dep1, to: 'Schiphol', arr: shlArr, pf: d.platform, train: d },
-          { xfer: true, mins: xfer, min: S.shl },
-          { from: 'Schiphol', dep: dep2, to: 'Rotterdam Centraal', arr, pf: conn.platform, train: conn, est: true }
-        ]
-      });
+  asd.filter(d => goesVia(d, 'schiphol') && !goesTo(d, 'rotterdam')).forEach(d => {
+    const dep1      = actualDepart(d);
+    if (dep1 < cutoff) return;
+    const legTime   = isSprinter(d) ? T.ASD_SHL_SPR : T.ASD_SHL_IC;
+    const shlArr    = addMin(dep1, legTime);
+    const conn      = shlToRtd.find(s => {
+      const gap = diffMin(shlArr, actualDepart(s));
+      return gap >= 0 && gap < 90;
     });
-
-  // ── 3. Metro ASD → ASDZ + train to RTD ─────────────────────────
-  asdz
-    .filter(d => goesTo(d, 'rotterdam'))
-    .forEach(d => {
-      const trainDep = actualDepart(d);
-      // Need to leave ASD (metroTime) before trainDep
-      const asdDep = addMin(trainDep, -S.metro);
-      if (asdDep < cutoff) return;
-      const tRTD = isICDirect(d) ? T.ASDZ_RTD : T.ASDZ_RTD + 5;
-      const arr  = addMin(trainDep, tRTD);
-      const total = Math.round(diffMin(asdDep, arr));
-
-      journeys.push({
-        type: 'Via Amsterdam Zuid',
-        totalMin: total,
-        dep: asdDep, arr,
-        legs: [
-          { from: 'Amsterdam Centraal', dep: asdDep, to: 'Amsterdam Zuid', arr: trainDep,
-            metro: true, metroMin: S.metro },
-          { from: 'Amsterdam Zuid', dep: trainDep, to: 'Rotterdam Centraal', arr, pf: d.platform, train: d, est: true }
-        ]
-      });
+    if (!conn) return;
+    const dep2  = actualDepart(conn);
+    const xfer  = Math.round(diffMin(shlArr, dep2));
+    const tRTD  = isICDirect(conn) ? T.SHL_RTD_ICD : T.SHL_RTD_IC;
+    const arr   = addMin(dep2, tRTD);
+    journeys.push({
+      type: 'Via Schiphol', totalMin: Math.round(diffMin(dep1, arr)),
+      dep: dep1, arr, xfer, xferMin: shlMin, possible: xfer >= shlMin,
+      legs: [
+        { from: 'Amsterdam Centraal', dep: dep1, to: 'Schiphol', arr: shlArr, pf: d.platform, train: d },
+        { xfer: true, mins: xfer, min: shlMin },
+        { from: 'Schiphol', dep: dep2, to: 'Rotterdam Centraal', arr, pf: conn.platform, train: conn, est: true }
+      ]
     });
+  });
 
-  return sort(journeys);
+  // 3. Metro ASD → ASDZ + IC Direct to RTD
+  asdz.filter(d => goesTo(d, 'rotterdam')).forEach(d => {
+    const trainDep  = actualDepart(d);
+    const metro     = getMetroTime(trainDep);
+    const asdDep    = addMin(trainDep, -metro.total);
+    if (asdDep < cutoff) return;
+    const tRTD      = isICDirect(d) ? T.ASDZ_RTD : T.ASDZ_RTD + 5;
+    const arr       = addMin(trainDep, tRTD);
+    journeys.push({
+      type: 'Via Amsterdam Zuid', totalMin: Math.round(diffMin(asdDep, arr)),
+      dep: asdDep, arr,
+      legs: [
+        { from: 'Amsterdam Centraal', dep: asdDep, to: 'Amsterdam Zuid', arr: trainDep,
+          metro: true, metroMin: metro.total, metroFreq: metro.freq },
+        { from: 'Amsterdam Zuid', dep: trainDep, to: 'Rotterdam Centraal', arr, pf: d.platform, train: d, est: true }
+      ]
+    });
+  });
+
+  return dedup(journeys);
 }
 
-function calcRTDtoAMS(deps) {
-  const { rtd, asdz, shl } = deps;
-  const cutoff = addMin(now(), -3);
+function calcRTDtoAMS(deps, refTime) {
+  const { rtd, shl } = deps;
+  const cutoff  = addMin(refTime, -3);
   const journeys = [];
 
-  // ── 1. Direct trains RTD → ASD ──────────────────────────────────
-  rtd
-    .filter(d => goesTo(d, 'amsterdam centraal'))
-    .forEach(d => {
-      const dep = actualDepart(d);
-      if (dep < cutoff) return;
-      const arr = addMin(dep, T.RTD_ASD_DIR);
-      journeys.push({
-        type: 'Direct',
-        totalMin: T.RTD_ASD_DIR,
-        dep, arr,
-        legs: [{
-          from: 'Rotterdam Centraal', dep,
-          to: 'Amsterdam Centraal', arr,
-          pf: d.platform, train: d, est: true
-        }]
-      });
+  // 1. Direct RTD → ASD
+  rtd.filter(d => goesTo(d, 'amsterdam centraal')).forEach(d => {
+    const dep = actualDepart(d);
+    if (dep < cutoff) return;
+    const arr = addMin(dep, T.RTD_ASD_DIR);
+    journeys.push({
+      type: 'Direct', totalMin: T.RTD_ASD_DIR, dep, arr,
+      legs: [{ from: 'Rotterdam Centraal', dep, to: 'Amsterdam Centraal', arr, pf: d.platform, train: d, est: true }]
     });
+  });
 
-  // ── 2. Via Schiphol: RTD → SHL → ASD ────────────────────────────
+  // 2. Via Schiphol: RTD → SHL → ASD
   const shlToAsd = shl.filter(d => goesTo(d, 'amsterdam'));
-  rtd
-    .filter(d => goesVia(d, 'schiphol') && !goesTo(d, 'amsterdam centraal'))
-    .forEach(d => {
-      const dep1   = actualDepart(d);
-      if (dep1 < cutoff) return;
-      const shlArr = addMin(dep1, T.RTD_SHL);
-
-      const conn = shlToAsd.find(s => {
-        const d2 = actualDepart(s);
-        const gap = diffMin(shlArr, d2);
-        return gap >= 0 && gap < 90;
-      });
-      if (!conn) return;
-
-      const dep2  = actualDepart(conn);
-      const xfer  = Math.round(diffMin(shlArr, dep2));
-      const arr   = addMin(dep2, T.SHL_ASD);
-      const total = Math.round(diffMin(dep1, arr));
-
-      journeys.push({
-        type: 'Via Schiphol',
-        totalMin: total,
-        dep: dep1, arr,
-        xfer, xferMin: S.shl,
-        possible: xfer >= S.shl,
-        legs: [
-          { from: 'Rotterdam Centraal', dep: dep1, to: 'Schiphol', arr: shlArr, pf: d.platform, train: d },
-          { xfer: true, mins: xfer, min: S.shl },
-          { from: 'Schiphol', dep: dep2, to: 'Amsterdam Centraal', arr, pf: conn.platform, train: conn, est: true }
-        ]
-      });
+  rtd.filter(d => goesVia(d, 'schiphol') && !goesTo(d, 'amsterdam centraal')).forEach(d => {
+    const dep1    = actualDepart(d);
+    if (dep1 < cutoff) return;
+    const shlArr  = addMin(dep1, T.RTD_SHL);
+    const conn    = shlToAsd.find(s => {
+      const gap = diffMin(shlArr, actualDepart(s));
+      return gap >= 0 && gap < 90;
     });
-
-  // ── 3. RTD → ASDZ + Metro to ASD ────────────────────────────────
-  rtd
-    .filter(d => goesVia(d, 'amsterdam zuid') || goesTo(d, 'amsterdam zuid'))
-    .forEach(d => {
-      const dep1   = actualDepart(d);
-      if (dep1 < cutoff) return;
-      const tASDZ  = isICDirect(d) ? T.RTD_ASDZ : T.RTD_ASDZ + 10;
-      const asdzArr = addMin(dep1, tASDZ);
-      const asdArr  = addMin(asdzArr, S.metro);
-      const total   = Math.round(diffMin(dep1, asdArr));
-
-      journeys.push({
-        type: 'Via Amsterdam Zuid',
-        totalMin: total,
-        dep: dep1, arr: asdArr,
-        legs: [
-          { from: 'Rotterdam Centraal', dep: dep1, to: 'Amsterdam Zuid', arr: asdzArr, pf: d.platform, train: d },
-          { from: 'Amsterdam Zuid', dep: asdzArr, to: 'Amsterdam Centraal', arr: asdArr,
-            metro: true, metroMin: S.metro, est: true }
-        ]
-      });
+    if (!conn) return;
+    const dep2  = actualDepart(conn);
+    const xfer  = Math.round(diffMin(shlArr, dep2));
+    const arr   = addMin(dep2, T.SHL_ASD);
+    journeys.push({
+      type: 'Via Schiphol', totalMin: Math.round(diffMin(dep1, arr)),
+      dep: dep1, arr, xfer, xferMin: shlMin, possible: xfer >= shlMin,
+      legs: [
+        { from: 'Rotterdam Centraal', dep: dep1, to: 'Schiphol', arr: shlArr, pf: d.platform, train: d },
+        { xfer: true, mins: xfer, min: shlMin },
+        { from: 'Schiphol', dep: dep2, to: 'Amsterdam Centraal', arr, pf: conn.platform, train: conn, est: true }
+      ]
     });
+  });
 
-  return sort(journeys);
+  // 3. RTD → ASDZ + Metro to ASD
+  rtd.filter(d => goesVia(d, 'amsterdam zuid') || goesTo(d, 'amsterdam zuid')).forEach(d => {
+    const dep1    = actualDepart(d);
+    if (dep1 < cutoff) return;
+    const tASDZ   = isICDirect(d) ? T.RTD_ASDZ : T.RTD_ASDZ + 10;
+    const asdzArr = addMin(dep1, tASDZ);
+    const metro   = getMetroTime(asdzArr);
+    const asdArr  = addMin(asdzArr, metro.total);
+    journeys.push({
+      type: 'Via Amsterdam Zuid', totalMin: Math.round(diffMin(dep1, asdArr)),
+      dep: dep1, arr: asdArr,
+      legs: [
+        { from: 'Rotterdam Centraal', dep: dep1, to: 'Amsterdam Zuid', arr: asdzArr, pf: d.platform, train: d },
+        { from: 'Amsterdam Zuid', dep: asdzArr, to: 'Amsterdam Centraal', arr: asdArr,
+          metro: true, metroMin: metro.total, metroFreq: metro.freq, est: true }
+      ]
+    });
+  });
+
+  return dedup(journeys);
 }
 
-function sort(journeys) {
-  // Deduplicate: same dep time + same type → keep first
+function dedup(journeys) {
   const seen = new Set();
   return journeys
     .filter(j => {
-      const key = `${j.type}|${+j.dep}`;
-      if (seen.has(key)) return false;
-      seen.add(key); return true;
+      const k = `${j.type}|${+j.dep}`;
+      if (seen.has(k)) return false;
+      seen.add(k); return true;
     })
     .sort((a, b) => +a.dep - +b.dep);
 }
@@ -601,19 +628,14 @@ function sort(journeys) {
 function renderJourneys(journeys) {
   const el = document.getElementById('journeyList');
   if (!journeys.length) {
-    el.innerHTML = '<div class="empty">No upcoming journeys found.<br>Try refreshing.</div>';
+    el.innerHTML = '<div class="empty">No journeys found for this time.<br>Try adjusting the departure time.</div>';
     return;
   }
-
-  // Mark fastest
   const fastest = [...journeys].sort((a, b) => a.totalMin - b.totalMin)[0];
 
-  el.innerHTML = journeys.map((j, i) => {
-    const isFastest = j === fastest;
-    const cancelled = j.legs.some(l => !l.xfer && !l.metro && l.train?.cancelled);
-    const xferLeg = j.legs.find(l => l.xfer);
-    const isPossible = xferLeg ? xferLeg.mins >= xferLeg.min : true;
-
+  el.innerHTML = journeys.map(j => {
+    const isFastest  = j === fastest;
+    const cancelled  = j.legs.some(l => !l.xfer && !l.metro && l.train?.cancelled);
     return `
 <div class="card ${cancelled ? 'cancelled' : ''}">
   <div class="card-head">
@@ -632,79 +654,61 @@ function renderJourneys(journeys) {
 }
 
 function renderDots(legs) {
-  const parts = [];
+  const p = [];
   legs.forEach((leg, i) => {
-    if (leg.xfer) {
-      parts.push('<div class="tl-line dashed"></div>');
-      return;
-    }
+    if (leg.xfer) { p.push('<div class="tl-line dashed"></div>'); return; }
     if (leg.metro) {
-      if (i === 0) {
-        parts.push('<div class="dot"></div>');
-        parts.push('<div class="tl-line dashed"></div>');
-      } else {
-        parts.push('<div class="tl-line dashed"></div>');
-        parts.push('<div class="dot end"></div>');
-      }
+      if (i === 0) { p.push('<div class="dot"></div><div class="tl-line dashed"></div>'); }
+      else         { p.push('<div class="tl-line dashed"></div><div class="dot end"></div>'); }
       return;
     }
-    const isFirst = i === 0 || (i === 1 && legs[0].metro);
-    const isLast  = i === legs.length - 1;
-
-    if (isFirst) parts.push('<div class="dot"></div>');
-    if (!isLast) parts.push('<div class="tl-line"></div><div class="dot mid"></div><div class="tl-line"></div>');
-    else parts.push('<div class="tl-line"></div><div class="dot end"></div>');
+    const first = i === 0 || (i === 1 && legs[0].metro);
+    const last  = i === legs.length - 1;
+    if (first) p.push('<div class="dot"></div>');
+    if (!last) p.push('<div class="tl-line"></div><div class="dot mid"></div><div class="tl-line"></div>');
+    else       p.push('<div class="tl-line"></div><div class="dot end"></div>');
   });
-  return `<div class="tl-dots">${parts.join('')}</div>`;
+  return `<div class="tl-dots">${p.join('')}</div>`;
 }
 
 function renderLeg(leg) {
   if (leg.xfer) {
-    const cls  = transferClass(leg.mins, leg.min);
-    const icon = transferIcon(leg.mins, leg.min);
-    const label = leg.mins >= leg.min
-      ? `${leg.mins} min transfer &mdash; OK`
-      : `${leg.mins} min transfer &mdash; Too tight`;
+    const ok   = leg.mins >= leg.min;
+    const cls  = ok ? (leg.mins >= leg.min + 2 ? 'xfer-ok' : 'xfer-warn') : 'xfer-bad';
+    const icon = ok ? '&#10003;' : '&#10005;';
+    const lbl  = ok ? `${leg.mins} min transfer &mdash; OK` : `${leg.mins} min transfer &mdash; Too tight`;
     return `
 <div class="xfer">
   <div class="xfer-icon ${cls}">${icon}</div>
   <div>
-    <div class="xfer-text ${cls}">${label}</div>
+    <div class="xfer-text ${cls}">${lbl}</div>
     <div class="xfer-sub">Your minimum: ${leg.min} min at Schiphol</div>
   </div>
 </div>`;
   }
 
   if (leg.metro) {
-    // Metro segment shown as part of origin or destination stop
+    const label = `~${leg.metroMin} min (every ${leg.metroFreq} min, 14 min journey) &mdash; GVB timetable`;
     if (leg.from === 'Amsterdam Centraal') {
-      // First leg: ASD → ASDZ by metro
       return `
 <div class="stop">
-  <div>
-    <div class="stop-time">${fmt(leg.dep)}</div>
-  </div>
+  <div><div class="stop-time">${fmt(leg.dep)}</div></div>
   <div>
     <div class="stop-name">Amsterdam Centraal <span class="badge badge-metro">Metro 52</span></div>
-    <div class="stop-detail">~${leg.metroMin} min to Amsterdam Zuid (incl. wait)</div>
+    <div class="stop-detail">${label}</div>
   </div>
 </div>`;
     } else {
-      // Last leg: ASDZ → ASD by metro
       return `
 <div class="stop" style="margin-top:4px">
-  <div>
-    <div class="stop-time">${fmt(leg.dep)}</div>
-  </div>
+  <div><div class="stop-time">${fmt(leg.dep)}</div></div>
   <div>
     <div class="stop-name">Amsterdam Zuid <span class="badge badge-metro">Metro 52</span></div>
-    <div class="stop-detail">~${leg.metroMin} min to Amsterdam Centraal (incl. wait)</div>
+    <div class="stop-detail">${label}</div>
   </div>
 </div>
 <div class="stop" style="margin-top:4px">
-  <div>
-    <div class="stop-time est">${fmt(leg.arr)}</div>
-  </div>
+  <div><div class="stop-time est">${fmt(leg.arr)}</div></div>
   <div>
     <div class="stop-name">Amsterdam Centraal</div>
     <div class="stop-detail">Estimated arrival</div>
@@ -713,27 +717,20 @@ function renderLeg(leg) {
     }
   }
 
-  // Normal train leg: show departure stop, then arrival stop
-  const d = leg.train;
-  const delayText = d && d.delaySeconds > 60
-    ? `<span class="delay">+${Math.round(d.delaySeconds/60)}m</span>` : '';
-  const badge = d ? trainBadge(d) : '';
-  const pfText = leg.pf ? `Platform ${leg.pf}` : '';
-
+  const d        = leg.train;
+  const delayTxt = d && d.delaySeconds > 60 ? `<span class="delay">+${Math.round(d.delaySeconds/60)}m</span>` : '';
+  const badge    = d ? trainBadge(d) : '';
+  const pfTxt    = leg.pf ? `Platform ${leg.pf}` : '';
   return `
 <div class="stop">
+  <div><div class="stop-time">${fmt(leg.dep)}</div></div>
   <div>
-    <div class="stop-time">${fmt(leg.dep)}</div>
-  </div>
-  <div>
-    <div class="stop-name">${leg.from}${badge}${delayText}</div>
-    ${pfText ? `<div class="stop-detail">${pfText}</div>` : ''}
+    <div class="stop-name">${leg.from}${badge}${delayTxt}</div>
+    ${pfTxt ? `<div class="stop-detail">${pfTxt}</div>` : ''}
   </div>
 </div>
 <div class="stop" style="margin-top:4px">
-  <div>
-    <div class="stop-time ${leg.est ? 'est' : ''}">${fmt(leg.arr)}</div>
-  </div>
+  <div><div class="stop-time ${leg.est ? 'est' : ''}">${fmt(leg.arr)}</div></div>
   <div>
     <div class="stop-name">${leg.to}</div>
     <div class="stop-detail">${leg.est ? 'Estimated arrival' : ''}</div>
@@ -752,13 +749,24 @@ function flipDirection() {
 
 function toggleSettings() {
   document.getElementById('settingsPanel').classList.toggle('open');
+  updateMetroInfo();
 }
 
-function changeSetting(key, delta) {
-  S[key] = Math.max(1, Math.min(30, S[key] + delta));
-  localStorage.setItem(key, S[key]);
-  document.getElementById(key + 'Val').textContent = S[key];
+function changeSetting(delta) {
+  shlMin = Math.max(1, Math.min(15, shlMin + delta));
+  localStorage.setItem('shl', shlMin);
+  document.getElementById('shlVal').textContent = shlMin;
   refresh();
+}
+
+function clearTime() {
+  document.getElementById('deptTime').value = '';
+  refresh();
+}
+
+function updateMetroInfo() {
+  const ref = getSelectedTime();
+  document.getElementById('metroInfoText').innerHTML = metroLabel(ref);
 }
 
 async function refresh() {
@@ -766,27 +774,38 @@ async function refresh() {
   isLoading = true;
   if (refreshTimer) clearTimeout(refreshTimer);
 
-  document.getElementById('statusText').textContent = 'Refreshing...';
+  const live   = isLiveMode();
+  const offset = getOffset();
+  const refTime = getSelectedTime();
+
+  // Update status dot
+  const dot = document.querySelector('.live-dot');
+  if (dot) dot.style.display = live ? 'inline-block' : 'none';
+
+  document.getElementById('statusText').innerHTML =
+    (live ? '<span class="live-dot"></span>' : '') + 'Refreshing...';
   document.getElementById('refreshBtn').style.opacity = '0.5';
+  updateMetroInfo();
 
   try {
-    // Fetch all four stations in parallel
     const [asd, asdz, shl, rtd] = await Promise.all([
-      fetchDeps('ASD'), fetchDeps('ASDZ'), fetchDeps('SHL'), fetchDeps('RTD')
+      fetchDeps('ASD', offset), fetchDeps('ASDZ', offset),
+      fetchDeps('SHL', offset), fetchDeps('RTD',  offset)
     ]);
 
-    const deps = { asd, asdz, shl, rtd };
+    const deps     = { asd, asdz, shl, rtd };
     const journeys = direction === 'AMS_RTD'
-      ? calcAMStoRTD(deps)
-      : calcRTDtoAMS(deps);
+      ? calcAMStoRTD(deps, refTime)
+      : calcRTDtoAMS(deps, refTime);
 
     renderJourneys(journeys);
 
-    const count = journeys.length;
-    document.getElementById('statusText').textContent =
-      `${count} option${count !== 1 ? 's' : ''} found`;
-    document.getElementById('updatedText').textContent =
-      `Updated ${fmt(new Date())}`;
+    const n = journeys.length;
+    const timeLabel = live ? '' : ` from ${fmt(refTime)}`;
+    document.getElementById('statusText').innerHTML =
+      (live ? '<span class="live-dot"></span>' : '&#128344; ') +
+      `${n} option${n !== 1 ? 's' : ''}${timeLabel}`;
+    document.getElementById('updatedText').textContent = `Updated ${fmt(new Date())}`;
 
   } catch (err) {
     document.getElementById('journeyList').innerHTML = `
@@ -801,8 +820,8 @@ async function refresh() {
   document.getElementById('refreshBtn').style.opacity = '1';
   isLoading = false;
 
-  // Auto-refresh every 60 seconds
-  refreshTimer = setTimeout(refresh, 60000);
+  // Only auto-refresh in live mode
+  if (live) refreshTimer = setTimeout(refresh, 60000);
 }
 
 // ── Init ─────────────────────────────────────────────────────────────
@@ -810,15 +829,14 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').catch(() => {});
 }
 
-// Generate icon dynamically for iOS "Add to Home Screen"
+// iOS home screen icon (generated via canvas)
 (function() {
   try {
     const c = document.createElement('canvas');
     c.width = c.height = 180;
     const ctx = c.getContext('2d');
     ctx.fillStyle = '#00587a';
-    if (ctx.roundRect) ctx.roundRect(0, 0, 180, 180, 40);
-    else ctx.rect(0, 0, 180, 180);
+    if (ctx.roundRect) ctx.roundRect(0, 0, 180, 180, 40); else ctx.rect(0, 0, 180, 180);
     ctx.fill();
     ctx.font = '90px serif';
     ctx.textAlign = 'center';
