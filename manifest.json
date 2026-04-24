@@ -1,0 +1,24 @@
+{
+  "name": "Amsterdam - Rotterdam Trains",
+  "short_name": "AMS-RTD",
+  "description": "Fastest train routes between Amsterdam and Rotterdam",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#00587a",
+  "theme_color": "#00587a",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
