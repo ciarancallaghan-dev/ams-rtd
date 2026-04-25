@@ -248,7 +248,9 @@ const T = {
   SHL_RTD_IC:  40, SHL_RTD_ICD: 25,
   RTD_SHL:     22, SHL_ASD:     17,
   ASDZ_RTD:    35, RTD_ASDZ:    30,
-  ASD_RTD_DIR: 60, RTD_ASD_DIR: 60,
+  // Direct fallbacks by train type (ICD=43, IC=65, Sprinter=76)
+  ASD_RTD_ICD: 43, ASD_RTD_IC: 65, ASD_RTD_SPR: 76,
+  RTD_ASD_ICD: 43, RTD_ASD_IC: 65, RTD_ASD_SPR: 76,
 };
 
 // Maximum offset the live API reliably supports (~4 hours)
@@ -364,7 +366,8 @@ function calcAMStoRTD(deps, arrRTD, arrSHL, refTime) {
   asd.filter(d => goesVia(d, 'rotterdam')).forEach(d => {
     const dep = actualDepart(d);
     if (dep < cutoff) return;
-    const { arr, exact, pf: arrPf } = exactArrival(d.serviceNumber, arrRTD, addMin(dep, T.ASD_RTD_DIR));
+    const { arr, exact, pf: arrPf } = exactArrival(d.serviceNumber, arrRTD,
+      addMin(dep, isICDirect(d) ? T.ASD_RTD_ICD : isSprinter(d) ? T.ASD_RTD_SPR : T.ASD_RTD_IC));
     const total = Math.round(diffMin(dep, arr));
     journeys.push({
       type: 'Direct', totalMin: total, dep, arr,
@@ -433,7 +436,8 @@ function calcRTDtoAMS(deps, arrASD, arrSHL, arrASDZ, refTime) {
   rtd.filter(d => goesTo(d, 'amsterdam centraal')).forEach(d => {
     const dep = actualDepart(d);
     if (dep < cutoff) return;
-    const { arr, exact, pf: arrPf } = exactArrival(d.serviceNumber, arrASD, addMin(dep, T.RTD_ASD_DIR));
+    const { arr, exact, pf: arrPf } = exactArrival(d.serviceNumber, arrASD,
+      addMin(dep, isICDirect(d) ? T.RTD_ASD_ICD : isSprinter(d) ? T.RTD_ASD_SPR : T.RTD_ASD_IC));
     const total = Math.round(diffMin(dep, arr));
     journeys.push({
       type: 'Direct', totalMin: total, dep, arr,
