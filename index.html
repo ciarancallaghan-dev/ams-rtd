@@ -239,6 +239,17 @@ document.getElementById('shlVal').textContent = shlMin;
 // Maximum offset the live API reliably supports (~4 hours)
 const MAX_OFFSET_MIN = 240;
 
+// ── GVB Metro line 52 timetable ──────────────────────────────────────
+function getMetroTime(refDate) {
+  const d   = refDate || new Date();
+  const h   = d.getHours() + d.getMinutes() / 60;
+  const day = d.getDay();
+  const wd  = day >= 1 && day <= 5;
+  const freq = wd && ((h >= 6.5 && h < 9.0) || (h >= 16.0 && h < 18.5)) ? 5
+             : !wd ? 10 : 7.5;
+  return { total: Math.round(freq / 2 + 14), freq };
+}
+
 // ── State ────────────────────────────────────────────────────────────
 let direction    = 'AMS_RTD';
 let refreshTimer = null;
@@ -372,10 +383,30 @@ function calcAMStoRTD(deps, arrRTD, arrSHL, refTime) {
     });
   });
 
+  // 3. Metro ASD → ASDZ + train to RTD (train arrival exact; metro wait from GVB timetable)
+  deps.asdz.filter(d => goesVia(d, 'rotterdam')).forEach(d => {
+    const trainDep = actualDepart(d);
+    const metro    = getMetroTime(trainDep);
+    const asdDep   = addMin(trainDep, -metro.total);
+    if (asdDep < cutoff) return;
+    const { arr, pf: arrPf } = exactArrival(d.serviceNumber, arrRTD);
+    if (!arr) return;
+    const total = Math.round(diffMin(asdDep, arr));
+    journeys.push({
+      type: 'Via Amsterdam Zuid', totalMin: total, dep: asdDep, arr,
+      legs: [
+        { from: 'Amsterdam Centraal', dep: asdDep, to: 'Amsterdam Zuid', arr: trainDep,
+          metro: true, metroMin: metro.total, metroFreq: metro.freq },
+        { from: 'Amsterdam Zuid', dep: trainDep, to: 'Rotterdam Centraal', arr,
+          pf: d.platform, arrPf, train: d }
+      ]
+    });
+  });
+
   return dedup(journeys);
 }
 
-function calcRTDtoAMS(deps, arrASD, arrSHL, refTime) {
+function calcRTDtoAMS(deps, arrASD, arrSHL, arrASDZ, refTime) {
   const { rtd, shl } = deps;
   const cutoff  = addMin(refTime, -3);
   const journeys = [];
@@ -422,6 +453,26 @@ function calcRTDtoAMS(deps, arrASD, arrSHL, refTime) {
     });
   });
 
+  // 3. RTD → ASDZ + Metro to ASD (ASDZ arrival exact; metro onward from GVB timetable)
+  rtd.filter(d => goesVia(d, 'amsterdam zuid') || goesTo(d, 'amsterdam zuid')).forEach(d => {
+    const dep1 = actualDepart(d);
+    if (dep1 < cutoff) return;
+    const { arr: asdzArr, pf: asdzArrPf } = exactArrival(d.serviceNumber, arrASDZ);
+    if (!asdzArr) return;
+    const metro  = getMetroTime(asdzArr);
+    const asdArr = addMin(asdzArr, metro.total);
+    const total  = Math.round(diffMin(dep1, asdArr));
+    journeys.push({
+      type: 'Via Amsterdam Zuid', totalMin: total, dep: dep1, arr: asdArr,
+      legs: [
+        { from: 'Rotterdam Centraal', dep: dep1, to: 'Amsterdam Zuid', arr: asdzArr,
+          pf: d.platform, arrPf: asdzArrPf, train: d },
+        { from: 'Amsterdam Zuid', dep: asdzArr, to: 'Amsterdam Centraal', arr: asdArr,
+          metro: true, metroMin: metro.total, metroFreq: metro.freq }
+      ]
+    });
+  });
+
   return dedup(journeys);
 }
 
@@ -460,7 +511,12 @@ function renderDots(legs) {
   const p = [];
   legs.forEach((leg, i) => {
     if (leg.xfer) { p.push('<div class="tl-line dashed"></div>'); return; }
-    const first = i === 0;
+    if (leg.metro) {
+      if (i === 0) p.push('<div class="dot"></div><div class="tl-line dashed"></div>');
+      else         p.push('<div class="tl-line dashed"></div><div class="dot end"></div>');
+      return;
+    }
+    const first = i === 0 || (i === 1 && legs[0].metro);
     const last  = i === legs.length - 1;
     if (first) p.push('<div class="dot"></div>');
     p.push(last ? '<div class="tl-line"></div><div class="dot end"></div>'
@@ -479,6 +535,35 @@ function renderLeg(leg) {
   <div>
     <div class="xfer-text ${cls}">${leg.mins} min transfer &mdash; ${ok ? 'OK' : 'Too tight'}</div>
     <div class="xfer-sub">Your minimum: ${leg.min} min at Schiphol</div>
+  </div>
+</div>`;
+  }
+
+  if (leg.metro) {
+    const info = `Every ${leg.metroFreq} min, ~14 min journey &mdash; GVB timetable`;
+    if (leg.from === 'Amsterdam Centraal') {
+      return `
+<div class="stop">
+  <div><div class="stop-time">${fmt(leg.dep)}</div></div>
+  <div>
+    <div class="stop-name">Amsterdam Centraal <span class="badge badge-metro">Metro 52</span></div>
+    <div class="stop-detail">${info}</div>
+  </div>
+</div>`;
+    }
+    return `
+<div class="stop" style="margin-top:4px">
+  <div><div class="stop-time">${fmt(leg.dep)}</div></div>
+  <div>
+    <div class="stop-name">Amsterdam Zuid <span class="badge badge-metro">Metro 52</span></div>
+    <div class="stop-detail">${info}</div>
+  </div>
+</div>
+<div class="stop" style="margin-top:4px">
+  <div><div class="stop-time est">${fmt(leg.arr)}</div></div>
+  <div>
+    <div class="stop-name">Amsterdam Centraal</div>
+    <div class="stop-detail">Timetable estimate</div>
   </div>
 </div>`;
   }
@@ -566,15 +651,17 @@ async function refresh() {
 
   try {
     // Fetch departures and exact arrivals at all relevant stations in parallel
-    const [asd, shl, rtd, arrRTD, arrASD, arrSHL] = await Promise.all([
-      fetchDeps('ASD', offset), fetchDeps('SHL', offset), fetchDeps('RTD', offset),
-      fetchArrivals('RTD', offset), fetchArrivals('ASD', offset), fetchArrivals('SHL', offset)
+    const [asd, asdz, shl, rtd, arrRTD, arrASD, arrSHL, arrASDZ] = await Promise.all([
+      fetchDeps('ASD', offset), fetchDeps('ASDZ', offset),
+      fetchDeps('SHL', offset), fetchDeps('RTD',  offset),
+      fetchArrivals('RTD', offset), fetchArrivals('ASD', offset),
+      fetchArrivals('SHL', offset), fetchArrivals('ASDZ', offset)
     ]);
 
-    const deps     = { asd, shl, rtd };
+    const deps     = { asd, asdz, shl, rtd };
     const journeys = direction === 'AMS_RTD'
       ? calcAMStoRTD(deps, arrRTD, arrSHL, refTime)
-      : calcRTDtoAMS(deps, arrASD, arrSHL, refTime);
+      : calcRTDtoAMS(deps, arrASD, arrSHL, arrASDZ, refTime);
 
     renderJourneys(journeys);
 

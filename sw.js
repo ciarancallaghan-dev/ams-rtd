@@ -1,4 +1,4 @@
-const CACHE = 'ams-rtd-v2';
+const CACHE = 'ams-rtd-v3';
 const ASSETS = ['./index.html', './manifest.json'];
 
 self.addEventListener('install', e =>
